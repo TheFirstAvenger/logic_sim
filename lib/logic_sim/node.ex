@@ -2,11 +2,11 @@ defmodule LogicSim.Node do
   @moduledoc """
   A node is the basic building block of LogicSim. A node is a GenServer that has 0 or more
   inputs, and 0 or more outputs. Each node keeps track of which nodes are connected to each
-  of its outputs, and when an output changes send a message to those nodes telling them what
-  value to set on the input they are conneted to.
+  of its outputs. When an output changes the node sends a message to its connected nodes
+  telling them what value to set on the input they are conneted to.
 
-  Nodes are modules that use `LogicSim.Node` as demonstrated below, optionally specifying a list of inputs,
-  a list of outputs, and a map with additional state:
+  Nodes are modules that `use LogicSim.Node` as demonstrated below, optionally specifying a list of inputs,
+  a list of outputs, and/or a map with additional state:
 
   ```
   defmodule LogicSim.Node.Or do
@@ -16,7 +16,8 @@ defmodule LogicSim.Node do
     use LogicSim.Node, outputs: [:a], additional_state: %{on: false}
   ```
 
-  and implement the callback calculate_outputs/2 as demonstrated in the `Not` gate:
+  and implement the callback calculate_outputs/2 to generate all output values given the current input
+  values as demonstrated here (the `Not` gate):
 
   ```
   def calculate_outputs(_state, %{a: a} = _input_values) do
@@ -40,7 +41,9 @@ defmodule LogicSim.Node do
       @behaviour LogicSim.Node
 
       @doc """
-      Starts the node. The opts keyword can have the following options:
+      Starts the node with the given options
+
+      Possible Options:
 
       listeners: a list of process pids that should be notified whenever the state of the node
       changes. Listener will receive `{:logic_sim_node_state, this_nodes_pid, this_nodes_state}`
@@ -63,32 +66,44 @@ defmodule LogicSim.Node do
         GenServer.start_link(__MODULE__, state)
       end
 
+      @doc """
+      Same as `start_link/1` but raises on error.
+      """
       def start_link!(opts \\ []) do
         {:ok, server} = start_link(opts)
         server
       end
 
+      @doc false
+      def child_spec(_) do
+        raise "child_spec not currently supported on #{__MODULE__}"
+      end
+
       ## GenServer Client functions
 
       @doc """
-      Links this nodes output to the input of another node. Takes this nodes pid, the output to attach
-      from, the node to attach to, and the node's input to attach to.
+      Links this nodes output to the input of another node.
+
+      Takes the output node, the output to attach from, the node to attach to, and
+      the node's input to attach to.
       """
-      def link_output_to_node(server, output, node, input) do
-        GenServer.call(server, {:link_output_to_node, output, node, input})
+      def link_output_to_node(output_node, output, input_node, input) do
+        GenServer.call(output_node, {:link_output_to_node, output, input_node, input})
       end
 
       @doc """
-      Tells this node to set its input to the given value. Will be called when the output is changed on a
-      node linked to this input.
+      Tells this node to set its input to the given value
+
+      Will be called by another node when its output is changed while linked to this input.
       """
       def set_node_input(node, input, input_value) do
         GenServer.call(node, {:set_node_input, input, input_value})
       end
 
       @doc """
-      Returs state of server. Also can be called from `LogicSim.Node.get_state`
-      if you don't know the node type.
+      Returns state of server.
+
+      Also can be called from `LogicSim.Node.get_state` if you don't know the node type.
       """
       def get_state(server) do
         GenServer.call(server, :get_state)
@@ -96,12 +111,13 @@ defmodule LogicSim.Node do
 
       ## GenServer Server functions
 
+      @doc false
       def init(state) do
         Logger.debug("Init node of type #{__MODULE__} with state #{inspect(state)}")
         {:ok, state}
       end
 
-      def send_state_to_listeners(%{listeners: listeners} = state) do
+      defp send_state_to_listeners(%{listeners: listeners} = state) do
         listeners
         |> Enum.map(&send(&1, {:logic_sim_node_state, self(), state}))
       end
