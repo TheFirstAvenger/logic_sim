@@ -113,6 +113,7 @@ defmodule LogicSim.Node do
 
       @doc false
       def init(state) do
+        state = %{state | output_values: calculate_outputs(state, state.input_values)}
         Logger.debug("Init node of type #{__MODULE__} with state #{inspect(state)}")
         {:ok, state}
       end
