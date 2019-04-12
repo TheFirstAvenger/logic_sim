@@ -97,7 +97,7 @@ defmodule LogicSim.Node do
       Will be called by another node when its output is changed while linked to this input.
       """
       def set_node_input(node, input, input_value) do
-        GenServer.call(node, {:set_node_input, input, input_value})
+        GenServer.cast(node, {:set_node_input, input, input_value})
       end
 
       @doc """
@@ -152,9 +152,8 @@ defmodule LogicSim.Node do
         {:reply, :ok, state}
       end
 
-      def handle_call(
+      def handle_cast(
             {:set_node_input, input, input_value},
-            _from,
             %{
               input_values: input_values,
               output_values: old_output_values,
@@ -188,9 +187,9 @@ defmodule LogicSim.Node do
 
           state = %{state | input_values: input_values, output_values: output_values}
           send_state_to_listeners(state)
-          {:reply, :ok, state}
+          {:noreply, state}
         else
-          {:reply, :ok, state}
+          {:noreply, state}
         end
       end
 
