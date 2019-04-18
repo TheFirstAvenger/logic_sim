@@ -75,8 +75,11 @@ defmodule LogicSim.Node do
       end
 
       @doc false
-      def child_spec(_) do
-        raise "child_spec not currently supported on #{__MODULE__}"
+      def child_spec(opts) do
+        %{
+          id: __MODULE__,
+          start: {__MODULE__, :start_link, [opts]}
+        }
       end
 
       ## GenServer Client functions
@@ -177,16 +180,16 @@ defmodule LogicSim.Node do
             }"
           )
 
-          output_values
-          |> Map.keys()
-          |> Enum.filter(fn key -> old_output_values[key] != output_values[key] end)
-          |> Enum.each(fn output ->
-            output_nodes
-            |> Map.get(output)
-            |> Enum.map(fn {node, input} -> set_node_input(node, input, output_values[output]) end)
-          end)
+          state = %{state | input_values: input_values}
 
-          state = %{state | input_values: input_values, output_values: output_values}
+          state =
+            output_values
+            |> Map.keys()
+            |> Enum.filter(fn key -> old_output_values[key] != output_values[key] end)
+            |> Enum.reduce(state, fn output, state_acc ->
+              set_output_value(output, output_values[output], state, false)
+            end)
+
           send_state_to_listeners(state)
           {:noreply, state}
         else
@@ -198,7 +201,8 @@ defmodule LogicSim.Node do
       defp set_output_value(
              output,
              output_value,
-             %{output_nodes: output_nodes, output_values: output_values} = state
+             %{output_nodes: output_nodes, output_values: output_values} = state,
+             send_to_listeners \\ true
            ) do
         if Map.get(output_values, output) != output_value do
           Logger.debug(
@@ -214,7 +218,7 @@ defmodule LogicSim.Node do
           |> Enum.each(fn {node, input} -> set_node_input(node, input, output_value) end)
 
           state = %{state | output_values: output_values}
-          send_state_to_listeners(state)
+          if send_to_listeners, do: send_state_to_listeners(state)
           state
         else
           state
