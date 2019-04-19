@@ -141,14 +141,7 @@ defmodule LogicSim.Node do
           } input #{inspect(input)}"
         )
 
-        output_value = Map.fetch!(output_values, output)
-
-        nodes_for_this_output =
-          output_nodes
-          |> Map.fetch!(output)
-          |> Map.put(node, input)
-
-        output_nodes = Map.put(output_nodes, output, nodes_for_this_output)
+        output_nodes = put_in(output_nodes, [output, node], input)
 
         set_node_input(node, input, Map.fetch!(output_values, output))
         state = %{state | output_nodes: output_nodes}
@@ -160,8 +153,7 @@ defmodule LogicSim.Node do
             {:set_node_input, input, input_value},
             %{
               input_values: input_values,
-              output_values: old_output_values,
-              output_nodes: output_nodes
+              output_values: old_output_values
             } = state
           ) do
         if Map.get(input_values, input) != input_value do
@@ -187,7 +179,7 @@ defmodule LogicSim.Node do
             |> Map.keys()
             |> Enum.filter(fn key -> old_output_values[key] != output_values[key] end)
             |> Enum.reduce(state, fn output, state_acc ->
-              set_output_value(output, output_values[output], state, false)
+              set_output_value(output, output_values[output], state_acc, false)
             end)
 
           send_state_to_listeners(state)
